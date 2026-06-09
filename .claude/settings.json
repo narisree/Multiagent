@@ -1,0 +1,16 @@
+{
+  "model": "claude-opus-4-8",
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(python3 .claude/skills/kql-sentinel-lint/lint.py:*)",
+      "Read(*)",
+      "Write(08-generated/**)",
+      "Write(06-lessons/**)",
+      "Write(05-sessions/**)",
+      "Write(04-decisions/**)",
+      "Write(07-questions/**)",
+      "Write(02-knowledge/**)"
+    ]
+  }
+}
