@@ -232,3 +232,99 @@ SigninLogs
 | where array_length(Countries) > 1    // signed in from multiple countries in 1 hour
 | project TimeGenerated, UserPrincipalName, Countries, Cities, IPCount, SigninCount
 ```
+
+---
+
+## 13. Time-Window Correlation (Add then Remove pattern)
+
+Source: Azure/Azure-Sentinel Tools/RuleMigration/Rule Logic Mappings.md
+
+**Use when:** Rule fires on event B occurring within a time window after event A, from the same entity (user/IP/host). The classic ArcSight `<EventJoin>` and QRadar "time window" pattern.
+
+```kql
+// Source: <SIEM> — <original rule name>
+// Detects: Event A followed by Event B from same entity within lookback window
+let waittime = 10m;   // must see event2 after event1 by at least this long
+let lookback = 1d;    // maximum gap between event1 and event2
+let event1 = (
+    SecurityEvent
+    | where TimeGenerated > ago(waittime + lookback)
+    | where EventID == 4728   // replace with actual event1 filter
+    | project event1_time = TimeGenerated, event1_ID = EventID,
+        event1_Activity = Activity, event1_Host = Computer,
+        TargetUserName, AccountUsedToAdd = SubjectUserName
+);
+let event2 = (
+    SecurityEvent
+    | where TimeGenerated > ago(waittime)
+    | where EventID == 4729   // replace with actual event2 filter
+    | project event2_time = TimeGenerated, event2_ID = EventID,
+        event2_Activity = Activity, event2_Host = Computer,
+        TargetUserName, AccountUsedToRemove = SubjectUserName
+);
+event1
+| join kind=inner event2 on TargetUserName
+| where event2_time - event1_time < lookback
+| where tolong(event2_time - event1_time) >= 0
+| project delta_time = event2_time - event1_time,
+    event1_time, event2_time, event1_ID, event2_ID,
+    event1_Activity, event2_Activity, TargetUserName,
+    AccountUsedToAdd, AccountUsedToRemove,
+    event1_Host, event2_Host
+```
+
+**Key notes:**
+- `event1` lookback = `waittime + lookback` to catch pairs where event2 just arrived
+- `event2` lookback = `waittime` (only recent events)
+- Post-join filter `event2_time - event1_time >= 0` ensures correct ordering
+- `delta_time` column useful for incident review
+
+---
+
+## 14. Negative Correlation (None-of-these-rules match)
+
+Source: Azure/Azure-Sentinel Tools/RuleMigration/Rule Logic Mappings.md
+
+**Use when:** QRadar "negative function" — fire when rule A matches but rule B does NOT match from the same source. Maps to `join kind=rightanti`.
+
+```kql
+// Source: QRadar — <original rule name>
+// Detects: Events matching condition A with NO corresponding event matching condition B
+let spanoftime = 10m;
+let conditionA = (
+    CommonSecurityLog
+    | where TimeGenerated > ago(spanoftime)
+    | where <condition A filter>
+    | project TimeGenerated, SourceIP, Protocol
+);
+let conditionB = (
+    CommonSecurityLog
+    | where TimeGenerated > ago(spanoftime)
+    | where <condition B filter>   // events that EXCLUDE the alert
+    | project SourceIP, Protocol
+);
+conditionA
+| join kind=rightanti conditionB on SourceIP, Protocol
+| project TimeGenerated, SourceIP, Protocol
+```
+
+**`rightanti` semantics:** returns rows from the right table that have NO match in the left table. Used to model "B happened but A did not."
+
+---
+
+## Performance Notes (from Microsoft Rule Migration Guide)
+
+Source: Azure/Azure-Sentinel Tools/RuleMigration/Rule Logic Mappings.md
+
+Apply these to every query:
+
+1. **Smaller table on the left in joins.** KQL broadcasts the left table; keeping it small reduces memory.
+2. **`hint.strategy=broadcast`** for the smaller table when it has ≤ ~100K records:
+   ```kql
+   bigTable | join hint.strategy=broadcast (smallTable) on Key
+   ```
+3. **Prefer `==` over `=~`** (case-sensitive is faster). Only use `=~`/`!~` when case-insensitivity is genuinely needed.
+4. **Prefer `has` over `contains`** for whole-word token matching — `has` uses inverted index; `contains` does full string scan.
+5. **Never use `search`** when the table name is known — `search` scans all tables.
+6. **Order `| where` clauses** from most-selective to least-selective — earliest filters reduce rows for downstream operators.
+7. **Use `in` over multiple `or`** for list membership — identical performance, better readability.

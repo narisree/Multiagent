@@ -247,3 +247,36 @@ ArcSight XML rules use internal ESM field names, not CEF keys. Common mappings:
 | `bytesOut` | `out` | `SentBytes` |
 
 For a complete field mapping, see `arcsight-to-sentinel.md`.
+
+---
+
+## Nested Filter → KQL Options
+
+Source: Azure/Azure-Sentinel Tools/RuleMigration/Rule Logic Mappings.md
+
+When an ArcSight `<Filter>` contains nested sub-filters with complex AND/OR/NOT logic, four KQL translation approaches are available (in order of preference):
+
+**Option 1 — Direct filter (preferred):** Flatten the logic into a single `| where` chain.
+```kql
+SecurityEvent
+| where EventID == 4728
+| where isnotempty(SubjectDomainName) or isnotempty(TargetDomainName)
+| where SubjectUserName !~ "AutoMatedService"
+```
+
+**Option 2 — KQL function:** Save shared filter logic as a reusable KQL function in the workspace, then call it.
+```kql
+// Saved function: ExcludeValidUsers
+let ExcludeValidUsers = (T: (SubjectUserName: string)) {
+    T | where SubjectUserName !in ("svc-backup", "AutoMatedService")
+};
+SecurityEvent
+| where EventID == 4728
+| invoke ExcludeValidUsers()
+```
+
+**Option 3 — Parameterized function:** Create a function with typed parameters when the exclusion list changes per-rule.
+
+**Option 4 — Join (least preferred):** Use `join kind=leftanti` only when the exclusion set is too large for inline `!in`. Avoid for simple cases — joins add cost.
+
+**Note:** Avoid `=~` / `!~` (case-insensitive) when `==` / `!=` is sufficient — case-sensitive operators use index lookups and are faster.

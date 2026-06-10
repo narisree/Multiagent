@@ -225,3 +225,66 @@ CommonSecurityLog
 | where TimeGenerated >= ago(1h)
 | where SourceIP in (BlocklistIPs)
 ```
+
+---
+
+## QRadar Date/Time Tests → KQL
+
+Source: Azure/Azure-Sentinel Tools/RuleMigration/Rule Logic Mappings.md
+
+QRadar rules can filter by day-of-month, day-of-week, and time-of-day. KQL equivalents:
+
+### Day of month
+```aql
+-- QRadar: event occurs on day < 4 of month
+```
+```kql
+| where dayofmonth(TimeGenerated) < 4
+```
+
+### Day of week
+```aql
+-- QRadar: event occurs Wednesday–Friday
+```
+```kql
+| where dayofweek(TimeGenerated) between (3d .. 5d)
+// dayofweek() returns a timespan: 0d=Sun, 1d=Mon, 2d=Tue, 3d=Wed, 4d=Thu, 5d=Fri, 6d=Sat
+```
+
+### Time of day
+```aql
+-- QRadar: event occurs at 23:55
+```
+```kql
+| where format_datetime(TimeGenerated, 'HH:mm') == "23:55"
+// TimeGenerated is UTC — convert to local time first if needed: datetime_utc_to_local()
+```
+
+---
+
+## QRadar Negative Function → KQL
+
+Source: Azure/Azure-Sentinel Tools/RuleMigration/Rule Logic Mappings.md
+
+QRadar "none of these rules match" (negative function) — fire when condition A is true but condition B is NOT true from the same source within the time window.
+
+```aql
+-- QRadar: Test2 matches but Test6 does NOT match (same SourceIP + Protocol)
+```
+```kql
+let spanoftime = 10m;
+let conditionA = (
+    CommonSecurityLog
+    | where Protocol !in ("UDP", "ICMP")
+    | where TimeGenerated > ago(spanoftime)
+);
+let conditionB = (
+    CommonSecurityLog
+    | where SourceIP == DestinationIP
+);
+conditionA
+| join kind=rightanti conditionB on $left.SourceIP == $right.SourceIP
+    and $left.Protocol == $right.Protocol
+```
+
+**`rightanti` join:** returns rows from right table with NO matching row in left table. Use when detecting absence of a correlating event.
