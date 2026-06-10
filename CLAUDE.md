@@ -27,6 +27,7 @@ Single-user. Version-controlled. Acts on the user's behalf without command invoc
 @02-knowledge/sentinel-schema/analytics-rule-schema.md
 @02-knowledge/sentinel-schema/entity-mappings.md
 @02-knowledge/sentinel-schema/asim/_index.md
+@02-knowledge/normalization-mappings/input-formats.md
 @02-knowledge/house-style/_index.md
 @06-lessons/lessons-learned.md
 @06-lessons/known-mistakes.md

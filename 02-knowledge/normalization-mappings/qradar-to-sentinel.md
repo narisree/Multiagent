@@ -7,6 +7,50 @@ QRadar rules use AQL (Ariel Query Language) and an internal event model. Logs ar
 
 ---
 
+## QRadar JSON Rule Export — Structure
+
+When QRadar rules are exported as JSON, the AQL query is in **`aqlQuery`** (preferred) or **`buildingBlocks[].logic`**. Always parse from there — not from the rule name or description.
+
+```json
+{
+  "id": 12345,
+  "name": "Multiple Failed Logins",
+  "type": "EventRule",
+  "enabled": true,
+  "groups": ["Authentication"],
+  "priority": 7,
+  "aqlQuery": "SELECT username, sourceip, count(*) AS cnt FROM events WHERE qid = 5100008 GROUP BY username, sourceip HAVING cnt > 5 LAST 10 MINUTES",
+  "buildingBlocks": [
+    { "id": 1, "name": "Auth failures BB", "logic": "SELECT ... FROM events WHERE ..." }
+  ],
+  "responseActions": []
+}
+```
+
+**Extraction targets:**
+
+| JSON key | Maps to |
+|---|---|
+| `aqlQuery` | PRIMARY: AQL query string — extract filter, GROUP BY, HAVING, LAST N |
+| `buildingBlocks[].logic` | FALLBACK: building block AQL (use when `aqlQuery` is absent) |
+| `priority` (1-10) | Sentinel severity via `severity-mappings.md` |
+| `groups[]` | MITRE tactic inference (e.g., `"Authentication"` → `CredentialAccess`) |
+| `enabled` | Sentinel `enabled` field |
+| `name` | Sentinel `displayName` |
+
+**AQL LAST clause → ISO 8601:**
+
+| AQL | KQL / ISO 8601 |
+|---|---|
+| `LAST 10 MINUTES` | `ago(10m)` / `PT10M` |
+| `LAST 1 HOURS` | `ago(1h)` / `PT1H` |
+| `LAST 24 HOURS` | `ago(24h)` / `PT24H` |
+| `LAST 7 DAYS` | `ago(7d)` / `P7D` |
+
+See `input-formats.md` for the full dual-input format spec.
+
+---
+
 ## QRadar Event Model → Sentinel Fields
 
 ### Core identity fields

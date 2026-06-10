@@ -12,25 +12,57 @@ Classify the input as **easy, medium, or hard**:
 - **Medium:** familiar detection type with twists — custom thresholds, moderate field mapping ambiguity, simple joins, partial precedent.
 - **Hard:** ANY of: unfamiliar source SIEM, no close precedent, complex correlation across tables, regex-heavy logic, custom aggregations, time-series detection, multi-stage kill-chain, ambiguous field semantics.
 
+**Classify by the native query complexity, not just the description.** A rule titled "Failed Logins" with a LAST 24 HOURS + HAVING + sub-SELECT is hard, not easy.
+
 **For hard inputs, you ARE authorized to ask 1-2 clarifying questions before translating.**
 
 State classification in 1 line at the top of the reply.
 
 ---
 
-## Step 1 — Identify source SIEM and parse the input
+## Step 1 — Parse the native query/rule syntax FIRST
 
-Extract from the input:
-- Source SIEM (ArcSight, QRadar, LogRhythm, Splunk, other)
-- Detection intent (what behavior is being detected)
-- Source log types / event categories referenced
-- Field names used (raw from source SIEM)
-- Threshold / aggregation logic
-- Time window / lookback period
-- MITRE ATT&CK tagging if present
-- Severity / priority in source SIEM scale
+**Rule: Extract detection logic FROM the query. The description is secondary context only.**
 
-State findings in 3-6 bullets.
+### 1a — Locate the query in the input
+
+| SIEM | Input format | Where to find the query |
+|---|---|---|
+| QRadar | JSON export | `aqlQuery` key (preferred) or `buildingBlocks[].logic` |
+| Splunk | JSON savedsearch | `content.search` key (the SPL string) |
+| ArcSight | ESM rule XML | `<Condition>` elements inside `<Filter>` + `<Threshold>` block |
+| LogRhythm | AIE XML or JSON | XML: `<Block>/<FieldConstraint>`; JSON: `ruleBlocks[].conditions[]` |
+| CSV inline | CSV row | `query` column |
+
+Reference: `02-knowledge/normalization-mappings/input-formats.md`
+
+### 1b — Extract from the query body
+
+From the native query/rule syntax, extract:
+
+| What to extract | Where it comes from | Maps to |
+|---|---|---|
+| Filter conditions (field, operator, value) | AQL WHERE / SPL where / `<Condition>` / conditions[] | KQL `\| where` clauses |
+| Aggregation fields | AQL GROUP BY / SPL `stats ... by` / `<Threshold field>` / `groupByField` | KQL `\| summarize ... by` |
+| Threshold value | AQL HAVING N / SPL `where count > N` / `<Threshold limit>` / `matchCount` | `let threshold = N` |
+| Threshold direction | HAVING > / >= / < / <= | `triggerOperator` + `\| where count > threshold` |
+| Time window | AQL LAST N / SPL `earliest_time` / `<Threshold timeWindow>` / `withinSeconds` | `let lookback = ago(X)` |
+| Grouping for correlation | AQL GROUP BY / SPL `by` / `<JoinCondition>` / `groupByField` | `\| summarize by` or `join on` |
+| Log source / data source | AQL FROM events / SPL index= / `<LogSourceCriteria>` / `logSourceFilters` | Sentinel table name |
+
+### 1c — Use description ONLY for MITRE inference
+
+Consult the `description`, rule `name`, or CSV `mitre_tactics` column **only to infer MITRE ATT&CK tactics/techniques** when they are absent from the query itself.
+
+### 1d — State findings
+
+State extracted fields in 3-6 bullets:
+- Source SIEM and query language
+- Log source / event type (what data this queries)
+- Filter conditions (what events match)
+- Aggregation + threshold (count > N within window)
+- Time window
+- Any fields with no clear mapping (flag for Step 3)
 
 ---
 

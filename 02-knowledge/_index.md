@@ -16,10 +16,13 @@
 - `sentinel-rules/_index.md` — index of all validated translated rules (HOUSE STYLE)
 
 ## Normalization Mappings (Source SIEM → Sentinel)
+- `normalization-mappings/input-formats.md` — dual-input spec (CSV + native per-SIEM format)
 - `normalization-mappings/arcsight-to-sentinel.md` — CEF fields → CommonSecurityLog + Sentinel
-- `normalization-mappings/qradar-to-sentinel.md` — QRadar fields → Sentinel tables
+- `normalization-mappings/arcsight-esm-rule-syntax.md` — ArcSight ESM XML rule parsing guide
+- `normalization-mappings/qradar-to-sentinel.md` — QRadar AQL + JSON rule export → Sentinel
 - `normalization-mappings/logrhythm-to-sentinel.md` — LogRhythm fields → Sentinel tables
-- `normalization-mappings/splunk-to-sentinel.md` — Splunk fields → Sentinel tables
+- `normalization-mappings/logrhythm-ai-engine-syntax.md` — LogRhythm AI Engine XML/JSON rule parsing guide
+- `normalization-mappings/splunk-to-sentinel.md` — Splunk SPL + JSON savedsearch → Sentinel
 - `normalization-mappings/severity-mappings.md` — all SIEM severity scales → Sentinel enum
 
 ## House Style

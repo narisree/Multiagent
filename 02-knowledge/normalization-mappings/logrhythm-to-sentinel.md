@@ -121,7 +121,24 @@ See `severity-mappings.md` for the canonical table.
 
 ---
 
-## LogRhythm AQL → KQL patterns
+## LogRhythm AI Engine Rule Syntax
+
+LogRhythm rules are expressed as AI Engine (AIE) rule blocks, not a traditional query language. Always extract detection logic from the rule block structure — not the rule description.
+
+**Full parsing guide:** `logrhythm-ai-engine-syntax.md`
+
+Key extraction points:
+- `matchCount` + `withinSeconds` → threshold + lookback window
+- `matchType` (`Any` vs `Unique`) → `count()` vs `dcount()`
+- `conditions[].field/comparator/value` → KQL `where` filter clauses
+- `logSourceFilters[].logSourceType` → Sentinel table selection
+- `riskRating` → Sentinel severity via `severity-mappings.md`
+
+For multi-block rules (sequence detection), see the correlation patterns in `logrhythm-ai-engine-syntax.md`.
+
+---
+
+## LogRhythm KQL patterns
 
 ### Basic rule (failed auth > threshold)
 ```

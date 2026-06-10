@@ -6,14 +6,22 @@ Bulk-translate legacy SIEM detection rules (ArcSight, QRadar, LogRhythm, Splunk,
 
 ## Supported Source SIEMs
 
-| SIEM | Input Formats | Coverage Level |
-|---|---|---|
-| IBM QRadar | JSON rule export, AQL/QRadar rule definitions | Full |
-| Micro Focus ArcSight | CEF events, XML rule definitions, JSON | Full |
-| LogRhythm | JSON export, XML rule definitions | Full |
-| Splunk | SPL saved searches/alerts, JSON export | Full |
-| McAfee/Trellix ESM | JSON, XML | Mapped on encounter |
-| RSA NetWitness | JSON rule export | Mapped on encounter |
+| SIEM | Native Query Language | Native Rule Format | Coverage |
+|---|---|---|---|
+| IBM QRadar | AQL (Ariel Query Language) — SQL-like | JSON rule export (`.aqlQuery`) | Full |
+| Micro Focus ArcSight | ESM rule XML (condition trees + threshold blocks) | XML export (`<Rule>/<Filter>/<Threshold>`) | Full |
+| LogRhythm | AI Engine rule blocks (XML or JSON) | XML (`<AIERuleBlock>`) or JSON (`ruleBlocks[]`) | Full |
+| Splunk | SPL (Search Processing Language) — pipe-based | JSON savedsearch (`content.search`) | Full |
+| McAfee/Trellix ESM | JSON, XML | JSON/XML | Mapped on encounter |
+| RSA NetWitness | JSON rule export | JSON | Mapped on encounter |
+
+## Input Format
+
+Every batch uses a **dual-input model**:
+1. **CSV file** (`rules.csv`) — metadata carrier: `rule_name, siem_type, severity, mitre_tactics, mitre_techniques, rule_file_path`
+2. **Native rule files** — one per rule: `.json` for QRadar/Splunk, `.xml` for ArcSight/LogRhythm
+
+The agent extracts detection logic **from the native query/rule syntax**, not from the description field. See `02-knowledge/normalization-mappings/input-formats.md` for the full format spec.
 
 ## Output per Translation
 

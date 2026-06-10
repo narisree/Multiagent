@@ -7,6 +7,61 @@ Splunk uses SPL (Search Processing Language). Logs land in Sentinel via:
 
 ---
 
+## Splunk JSON Export — Structure (savedsearches)
+
+Splunk saves searches/alerts are exported as JSON. The SPL query is in **`content.search`**. Always parse from there first.
+
+```json
+{
+  "name": "Multiple Failed Logins",
+  "content": {
+    "search": "index=wineventlog EventCode=4625 | stats count as failures by Account_Name, src | where failures > 5",
+    "cron_schedule": "*/15 * * * *",
+    "dispatch.earliest_time": "-15m",
+    "dispatch.latest_time": "now",
+    "alert_threshold": "0",
+    "alert_comparator": "greater than",
+    "alert.severity": "3",
+    "description": "Detects brute force login attempts"
+  }
+}
+```
+
+**Extraction targets:**
+
+| JSON key | Maps to |
+|---|---|
+| `content.search` | PRIMARY: SPL query string — extract `index`, `where`, `stats`, `eval`, `rex` |
+| `content.cron_schedule` | `queryFrequency` — convert cron to ISO 8601 (see table below) |
+| `content.dispatch.earliest_time` | `queryPeriod` — convert Splunk relative time to ISO 8601 |
+| `content.alert.severity` | Sentinel severity via `severity-mappings.md` |
+| `content.description` | SECONDARY only — consult for MITRE inference if SPL gives no hints |
+| `name` | Sentinel `displayName` |
+
+**Cron → ISO 8601 frequency:**
+
+| Cron | ISO 8601 |
+|---|---|
+| `*/5 * * * *` | `PT5M` |
+| `*/15 * * * *` | `PT15M` |
+| `0 * * * *` | `PT1H` |
+| `0 */4 * * *` | `PT4H` |
+| `0 0 * * *` | `P1D` |
+
+**Splunk relative time → KQL `ago()`:**
+
+| Splunk | KQL |
+|---|---|
+| `-5m` | `ago(5m)` |
+| `-15m` | `ago(15m)` |
+| `-1h` | `ago(1h)` |
+| `-24h` | `ago(24h)` |
+| `-7d` | `ago(7d)` |
+
+See `input-formats.md` for the full dual-input format spec.
+
+---
+
 ## SPL Operator → KQL Operator
 
 | SPL | KQL | Notes |
