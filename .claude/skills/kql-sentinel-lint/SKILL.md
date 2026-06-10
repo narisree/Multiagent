@@ -9,13 +9,24 @@ This skill audits a translated Sentinel Analytics Rule for KQL correctness, sche
 
 ## Invocation
 
-When a translation is generated at `08-generated/<folder>/`:
+When a translation is generated at `08-generated/<folder>/`, run the highest tier available and state the mode (`static+live | static | cognitive`):
 
-1. Try: `python3 .claude/skills/kql-sentinel-lint/lint.py 08-generated/<folder>/rule.json`
-2. If exit code 0: emit findings JSON. Done.
-3. If blocked: fall through to cognitive checklist.
+1. **static+live** — if `SENTINEL_VALIDATE_WORKSPACE_ID` is set (or `validate-config.local.json` exists next to lint.py):
+   `python3 .claude/skills/kql-sentinel-lint/lint.py 08-generated/<folder>/rule.json --live`
+2. **static** — otherwise:
+   `python3 .claude/skills/kql-sentinel-lint/lint.py 08-generated/<folder>/rule.json`
+   State "live validation skipped: <reason>".
+3. **cognitive** — if Python is blocked, fall through to the cognitive checklist below.
+   State "Linter could not run; running cognitive review against the same rubric."
 
-When falling through: "Linter could not run; running cognitive review against the same rubric."
+### Live validation setup (user-side, one-time)
+
+```bash
+az login
+export SENTINEL_VALIDATE_WORKSPACE_ID=<Log Analytics workspace customerId GUID>
+```
+
+Live validation appends `| take 0` and runs the query against the configured workspace via `az monitor log-analytics query` — no data rows are returned. **Data sovereignty:** query text is sent ONLY to the user's authenticated Azure tenant; never to online validators. Note: a semantic failure may mean the validation workspace lacks a table the client workspace has — verify against the target workspace before treating it as a translation error.
 
 ## Cognitive checklist
 
@@ -30,6 +41,8 @@ When falling through: "Linter could not run; running cognitive review against th
 - **E.TIME_FILTER_MISSING** — No `TimeGenerated` or equivalent time filter; will cause full table scan.
 - **E.ARM_INVALID_JSON** — ARM template is malformed JSON.
 - **E.ARM_MISSING_REQUIRED** — ARM template missing required field: `displayName`, `query`, `severity`, `queryFrequency`, `queryPeriod`, `triggerOperator`, `triggerThreshold`.
+- **E.KQL_LIVE_SYNTAX** — (live mode only) Kusto engine rejected the query syntax.
+- **E.KQL_LIVE_SEMANTIC** — (live mode only) Kusto engine could not resolve a table or column. May indicate the validation workspace lacks a table the client workspace has — verify against the target workspace.
 
 ### Severity 2 — Schema violations (Sentinel editor will reject)
 
@@ -84,7 +97,10 @@ When falling through: "Linter could not run; running cognitive review against th
 ### Field mapping errors (F.*)
 ### House-style deviations (H.*)
 ### Risks (R.*)
+### Live validation
 ### Looks correct
 ```
+
+Live validation line: `passed` | `failed: <Kusto error>` | `skipped: <reason>`.
 
 If no findings in a category, omit the heading.

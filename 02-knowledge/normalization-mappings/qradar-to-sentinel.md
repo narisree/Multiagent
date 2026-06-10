@@ -288,3 +288,64 @@ conditionA
 ```
 
 **`rightanti` join:** returns rows from right table with NO matching row in left table. Use when detecting absence of a correlating event.
+
+---
+
+## Hard Constructs
+
+Stateful or compositional QRadar constructs without a 1:1 KQL equivalent. Recipe format: what it is → KQL equivalent (Direct / Partial / None) → recipe → caveats. Classify any rule containing these as **hard** in Step 0.
+
+### Building-block chains
+
+**What it is:** A rule whose tests reference other building blocks ("when BB:AuthFailures matches AND BB:ExternalSource matches"). In the JSON export, the rule's `aqlQuery` may be absent and the logic spread across `buildingBlocks[].logic`, with BBs referencing other BBs by name/id.
+**KQL equivalent:** Partial — compose via `let` blocks.
+**Recipe:** Resolve references recursively at parse time, then inline each building block as a named `let` tabular expression:
+```kql
+// BB:AuthFailures + BB:ExternalSource composed into one rule
+let lookback = ago(10m);
+let bbAuthFailures = SecurityEvent
+    | where TimeGenerated >= lookback
+    | where EventID == 4625;
+let bbExternalSource = bbAuthFailures
+    | where not(ipv4_is_private(IpAddress));
+bbExternalSource
+| summarize FailureCount = count() by AccountName, IpAddress
+| where FailureCount > 5
+| project AccountName, IpAddress, FailureCount
+```
+**Caveats:** Chains deeper than 2 levels, or BBs referenced by multiple rules, are a signal to translate the shared BB once as a workspace KQL function instead of inlining N times. Circular BB references or a BB whose `logic` is missing from the export = blocking question → `07-questions/open-questions.md`. Logic Fidelity −10 when any referenced BB had to be inferred.
+
+### Reference set WRITE (response action)
+
+**What it is:** `responseActions[]` containing an add-to-reference-set action (e.g., `{"type": "addToReferenceSet", "set": "Blocklist-IPs", "value": "sourceip"}`). The rule both detects AND updates shared state.
+**KQL equivalent:** None — decomposition required.
+**Recipe:** Pattern 17 in `02-knowledge/house-style/kql-patterns.md`: (1) Analytics Rule for the detection (reference-set READ stays `_GetWatchlist`, see section above), (2) Sentinel Watchlist as the state store, (3) automation rule + Logic App playbook performing the watchlist write. Agent delivers rule.json + playbook spec in notes.md; playbook deployment is the user's manual step.
+**Caveats:** QRadar reference sets support per-element TTL (`time_to_live`); Watchlists do not auto-expire — note staleness risk and the need for a pruning playbook. Logic Fidelity ≤ 80% until the full chain is deployed.
+
+### AQL custom properties
+
+**What it is:** Custom event properties (regex- or JSON-extracted fields defined in QRadar, e.g., `"CustomUsername"`) appearing as ordinary columns in AQL.
+**KQL equivalent:** Partial — re-create the extraction inline.
+**Recipe:** Obtain the property's extraction definition from the QRadar export (or ask). Then:
+```kql
+| extend CustomUsername = extract(@"user=(\S+)", 1, SyslogMessage)
+```
+If the client's Sentinel ingestion has a custom parser/DCR producing a `_CL` table, map to that column instead and confirm the table name with the user.
+**Caveats:** Always inference — drop Field Mapping confidence ≥10 points per Step 3 rule 4 and add the property to `07-questions/open-questions.md` if the extraction regex was not in the export.
+
+### Offense chaining
+
+**What it is:** Rules testing offense attributes ("when an offense is created", "when the offense magnitude exceeds N") — second-order logic over QRadar's correlation output, not over events.
+**KQL equivalent:** Partial — two options by intent.
+**Recipe:**
+- If the chain only aggregates the same detection (dedup/grouping): use the Analytics Rule's `incidentConfiguration.groupingConfiguration` (matchingMethod `AllEntities` or `Selected`) instead of a second rule.
+- If the chain tests "offense from rule X exists, then…": write a second-stage Analytics Rule over `SecurityAlert`:
+```kql
+let lookback = ago(1h);
+SecurityAlert
+| where TimeGenerated >= lookback
+| where AlertName == "<first-stage rule displayName>"
+| summarize AlertCount = count() by CompromisedEntity
+| where AlertCount > 3
+```
+**Caveats:** `SecurityAlert` rows appear minutes after the first-stage rule fires — set the second-stage `queryPeriod` generously (≥ 2× first-stage frequency). Offense magnitude has no Sentinel equivalent (closest: alert severity) — flag as inference.

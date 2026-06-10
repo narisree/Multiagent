@@ -18,13 +18,13 @@
 ## Normalization Mappings (Source SIEM → Sentinel)
 - `normalization-mappings/input-formats.md` — dual-input spec (CSV + native per-SIEM format)
 - `normalization-mappings/arcsight-to-sentinel.md` — CEF fields → CommonSecurityLog + Sentinel
-- `normalization-mappings/arcsight-esm-rule-syntax.md` — ArcSight ESM XML rule parsing guide
-- `normalization-mappings/qradar-to-sentinel.md` — QRadar AQL + JSON rule export → Sentinel
+- `normalization-mappings/arcsight-esm-rule-syntax.md` — ArcSight ESM XML rule parsing guide + hard constructs (active lists, session lists, variables, MatchesFilter)
+- `normalization-mappings/qradar-to-sentinel.md` — QRadar AQL + JSON rule export → Sentinel + hard constructs (building blocks, reference-set writes, custom properties, offense chaining)
 - `normalization-mappings/logrhythm-to-sentinel.md` — LogRhythm fields → Sentinel tables
-- `normalization-mappings/logrhythm-ai-engine-syntax.md` — LogRhythm AI Engine XML/JSON rule parsing guide
-- `normalization-mappings/splunk-to-sentinel.md` — Splunk SPL + JSON savedsearch → Sentinel
+- `normalization-mappings/logrhythm-ai-engine-syntax.md` — LogRhythm AI Engine XML/JSON rule parsing guide + hard constructs (ordered sequences, observation windows, cross-block uniqueness)
+- `normalization-mappings/splunk-to-sentinel.md` — Splunk SPL + JSON savedsearch → Sentinel + hard constructs (tstats/data models, transaction, streamstats/eventstats, macros, subsearches, throttling)
 - `normalization-mappings/severity-mappings.md` — all SIEM severity scales → Sentinel enum
 
 ## House Style
 - `house-style/_index.md` — validated KQL patterns and conventions
-- `house-style/kql-patterns.md` — reusable query snippets by detection type
+- `house-style/kql-patterns.md` — reusable query snippets by detection type (18 patterns incl. scan sequences, session reconstruction, stateful-write decomposition, running aggregates)

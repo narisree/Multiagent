@@ -1,0 +1,38 @@
+{
+  "kind": "Scheduled",
+  "properties": {
+    "displayName": "QRadar: Multiple Failed Logins",
+    "description": "Brute force detection migrated from QRadar rule 'Multiple Failed Logins'.",
+    "severity": "High",
+    "enabled": true,
+    "query": "// Source: QRadar — Multiple Failed Logins\nlet lookback = ago(1h);\nlet threshold = 5;\nSecurityEvent\n| where TimeGenerated >= lookback\n| where EventID == 4625\n| where AccountName !endswith \"$\"\n| summarize FailureCount = count() by AccountName, IpAddress, Computer\n| where FailureCount > threshold\n| project AccountName, IpAddress, Computer, FailureCount",
+    "queryFrequency": "PT1H",
+    "queryPeriod": "PT1H",
+    "triggerOperator": "GreaterThan",
+    "triggerThreshold": 0,
+    "suppressionDuration": "PT1H",
+    "suppressionEnabled": false,
+    "tactics": ["CredentialAccess"],
+    "techniques": ["T1110"],
+    "entityMappings": [
+      {
+        "entityType": "Account",
+        "fieldMappings": [
+          { "identifier": "Name", "columnName": "AccountName" }
+        ]
+      },
+      {
+        "entityType": "IP",
+        "fieldMappings": [
+          { "identifier": "Address", "columnName": "IpAddress" }
+        ]
+      },
+      {
+        "entityType": "Host",
+        "fieldMappings": [
+          { "identifier": "HostName", "columnName": "Computer" }
+        ]
+      }
+    ]
+  }
+}

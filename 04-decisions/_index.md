@@ -6,7 +6,7 @@ ADR-style records for translation decisions and design choices.
 
 | ID | Title | Status | Date |
 |---|---|---|---|
-| *(none yet — added as decisions are made)* | | | |
+| [ADR-001](ADR-001-live-kql-validation-via-az-cli.md) | Live KQL validation via az CLI against the user's own tenant | accepted | 2026-06-10 |
 
 ## Format
 

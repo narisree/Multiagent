@@ -1,0 +1,32 @@
+{
+  "kind": "Scheduled",
+  "properties": {
+    "displayName": "Splunk: Excessive Failed VPN Logins",
+    "description": "Fixture: triggerThreshold=0 while the KQL gates on a let-bound threshold — the case the pre-fix linter missed.",
+    "severity": "Medium",
+    "enabled": true,
+    "query": "// Source: Splunk — Excessive Failed VPN Logins\nlet lookback = ago(30m);\nlet threshold = 10;\nCommonSecurityLog\n| where TimeGenerated >= lookback\n| where DeviceVendor == \"Cisco\"\n| where DeviceEventClassID == \"vpn-login-failed\"\n| summarize failures = count() by SourceUserName, SourceIP\n| where failures > threshold\n| project SourceUserName, SourceIP, failures",
+    "queryFrequency": "PT30M",
+    "queryPeriod": "PT30M",
+    "triggerOperator": "GreaterThan",
+    "triggerThreshold": 0,
+    "suppressionDuration": "PT30M",
+    "suppressionEnabled": false,
+    "tactics": ["CredentialAccess"],
+    "techniques": ["T1110"],
+    "entityMappings": [
+      {
+        "entityType": "Account",
+        "fieldMappings": [
+          { "identifier": "Name", "columnName": "SourceUserName" }
+        ]
+      },
+      {
+        "entityType": "IP",
+        "fieldMappings": [
+          { "identifier": "Address", "columnName": "SourceIP" }
+        ]
+      }
+    ]
+  }
+}

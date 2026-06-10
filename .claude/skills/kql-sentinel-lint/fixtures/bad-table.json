@@ -1,0 +1,19 @@
+{
+  "kind": "Scheduled",
+  "properties": {
+    "displayName": "ArcSight: Brute Force Login",
+    "description": "Fixture: misspelled table (SecurityEvents), join without kind, non-ISO duration, invalid tactic.",
+    "severity": "High",
+    "enabled": true,
+    "query": "// Source: ArcSight — Brute Force Login\nlet lookback = ago(1h);\nlet threshold = 5;\nSecurityEvents\n| where TimeGenerated >= lookback\n| where EventID == 4625\n| summarize failures = count() by AccountName, IpAddress\n| where failures > threshold\n| join (SecurityEvent) on AccountName\n| project AccountName, IpAddress, failures",
+    "queryFrequency": "1h",
+    "queryPeriod": "PT1H",
+    "triggerOperator": "GreaterThan",
+    "triggerThreshold": 0,
+    "suppressionDuration": "PT1H",
+    "suppressionEnabled": false,
+    "tactics": ["CredentialAccess", "BruteForce"],
+    "techniques": ["T1110"],
+    "entityMappings": []
+  }
+}

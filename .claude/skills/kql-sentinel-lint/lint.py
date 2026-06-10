@@ -114,6 +114,13 @@ KQL_KEYWORDS = {
 
 ISO8601_DURATION = re.compile(r"^P(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(\d+H)?(\d+M)?(\d+S)?)?$")
 
+LET_NUMERIC = re.compile(r"^\s*let\s+(\w+)\s*=\s*(\d+(?:\.\d+)?)\s*;", re.MULTILINE)
+
+
+def resolve_let_bindings(kql: str) -> dict:
+    """Map let-bound numeric variables to their values, e.g. 'let threshold = 5;' -> {'threshold': 5.0}."""
+    return {m.group(1): float(m.group(2)) for m in LET_NUMERIC.finditer(kql)}
+
 ARM_REQUIRED_PROPERTIES = {
     "displayName", "query", "severity",
     "queryFrequency", "queryPeriod",
@@ -243,9 +250,23 @@ def check_semantic(kql: str, properties: dict) -> list[Finding]:
     findings = []
 
     threshold = properties.get("triggerThreshold", None)
-    if threshold == 0 and re.search(r"\|\s*where\s+\w+\s*>\s*[1-9]", kql):
-        findings.append(Finding("S", "S.THRESHOLD_WRONG", 0,
-            "triggerThreshold=0 but KQL filters count > N — verify alert fires on any match vs. threshold breach"))
+    if threshold == 0:
+        let_bindings = resolve_let_bindings(kql)
+        for m in re.finditer(r"\|\s*where\s+(\w+)\s*(>=|>)\s*(\w+(?:\.\d+)?)", kql):
+            column, op, operand = m.group(1), m.group(2), m.group(3)
+            if re.fullmatch(r"\d+(?:\.\d+)?", operand):
+                value = float(operand)
+                source = operand
+            elif operand in let_bindings:
+                value = let_bindings[operand]
+                source = f"let {operand} = {let_bindings[operand]:g}"
+            else:
+                continue  # unresolvable identifier — skip, no false positive
+            if value >= 1:
+                findings.append(Finding("S", "S.THRESHOLD_WRONG", 0,
+                    f"triggerThreshold=0 but KQL filters {column} {op} {operand} ({source}) — "
+                    "verify alert fires on any match vs. threshold breach"))
+                break
 
     if not re.search(r"tolower\s*\(|toupper\s*\(", kql) and re.search(r"==\s*['\"]", kql):
         findings.append(Finding("S", "S.CASE_SENSITIVITY", 0,
@@ -363,10 +384,11 @@ def check_arm_template(rule: dict) -> list[Finding]:
 
 def main():
     verbose = "--verbose" in sys.argv
+    live = "--live" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
 
     if not args:
-        print(json.dumps({"error": "usage: lint.py <rule.json> [--verbose]"}))
+        print(json.dumps({"error": "usage: lint.py <rule.json> [--verbose] [--live]"}))
         sys.exit(0)
 
     rule_path = Path(args[0])
@@ -412,6 +434,20 @@ def main():
             "warnings": len(findings) - len(bucket("E")),
         }
     }
+
+    if live:
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            import validate
+            output["live_validation"] = validate.run_live(rule_path)
+        except Exception as exc:  # advisory only — never block delivery
+            output["live_validation"] = {"status": "skipped",
+                                         "reason": f"live validation unavailable: {exc}",
+                                         "findings": []}
+        live_findings = output["live_validation"].get("findings", [])
+        output["errors"].extend(live_findings)
+        output["summary"]["total"] += len(live_findings)
+        output["summary"]["errors"] += len(live_findings)
 
     print(json.dumps(output, indent=2))
     sys.exit(0)
