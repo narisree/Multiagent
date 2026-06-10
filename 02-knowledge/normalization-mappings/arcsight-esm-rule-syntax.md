@@ -280,3 +280,62 @@ SecurityEvent
 **Option 4 — Join (least preferred):** Use `join kind=leftanti` only when the exclusion set is too large for inline `!in`. Avoid for simple cases — joins add cost.
 
 **Note:** Avoid `=~` / `!~` (case-insensitive) when `==` / `!=` is sufficient — case-sensitive operators use index lookups and are faster.
+
+---
+
+## Hard Constructs
+
+ESM constructs without a 1:1 KQL equivalent. Recipe format: what it is → KQL equivalent (Direct / Partial / None) → recipe → caveats. Classify any rule containing these as **hard** in Step 0.
+
+### Active list READ (`InActiveList` condition)
+
+**What it is:** `<Condition field="sourceAddress" op="InActiveList" value="Blocklist-IPs"/>` — membership test against a shared, mutable list.
+**KQL equivalent:** Direct — Sentinel Watchlist.
+**Recipe:**
+```kql
+let BlocklistIPs = _GetWatchlist('Blocklist-IPs') | project SearchKey;
+CommonSecurityLog
+| where TimeGenerated >= ago(1h)
+| where SourceIP in (BlocklistIPs)
+```
+**Caveats:** Confirm the watchlist exists in the client workspace (or deliver a creation step in notes.md). Multi-column active lists: `_GetWatchlist` returns all columns — join on the keyed column instead of `project SearchKey`.
+
+### Active list WRITE (rule action "Add to Active List")
+
+**What it is:** A rule `<Action>` that inserts the matched entity into an active list, feeding other rules' `InActiveList` tests.
+**KQL equivalent:** None — decomposition required.
+**Recipe:** Pattern 17 in `02-knowledge/house-style/kql-patterns.md`: (1) Analytics Rule for the detection, (2) Watchlist as the state store, (3) automation rule + Logic App playbook performing the watchlist write. Agent delivers rule.json + playbook spec in notes.md; playbook deployment is the user's manual step.
+**Caveats:** Active list entries have TTL; Watchlists do not auto-expire — pruning playbook or accepted staleness, stated in notes.md. Logic Fidelity ≤ 80% until the full chain is deployed.
+
+### Session lists
+
+**What it is:** TTL'd start/end state tracking (e.g., "VPN session open" between logon and logoff events), queried by other rules mid-session.
+**KQL equivalent:** Partial — by session lifetime.
+**Recipe:**
+- Session fully observable within the rule's lookback window: model it inline — pattern 16 (session reconstruction) or pattern 13 (start/end pairing join). Set `queryPeriod` ≥ the session list's TTL.
+- Session state must persist beyond a reasonable `queryPeriod` (e.g., multi-day VPN sessions consulted by other rules): decompose per pattern 17, with the playbook writing session open/close entries to a watchlist.
+**Caveats:** Prefer the inline form — the watchlist form adds write latency and a second deployment artifact. If multiple ESM rules consult the same session list, the watchlist form is mandatory (shared state).
+
+### Rule variables (calculated fields)
+
+**What it is:** ESM "local variables" computed on the rule (string concatenation, arithmetic, field extraction) and referenced in conditions or actions.
+**KQL equivalent:** Direct — `| extend`.
+**Recipe:** Translate each variable to an `extend` before the conditions that use it. Common ESM function counterparts:
+
+| ESM variable function | KQL |
+|---|---|
+| Concatenate | `strcat(a, b)` |
+| Substring | `substring(s, start, len)` |
+| ToLowerCase / ToUpperCase | `tolower(s)` / `toupper(s)` |
+| Arithmetic (+, -, *, /) | same operators via `extend` |
+| Regex extract | `extract(@"pattern", 1, field)` |
+| Timestamp difference | `datetime_diff('minute', t1, t2)` |
+
+**Caveats:** Variables referencing active list lookups combine this recipe with the active-list recipes above. An ESM function with no row in this table = flag as inference, Field Mapping −10.
+
+### MatchesFilter (reference to a saved Filter resource)
+
+**What it is:** `<Condition op="MatchesFilter" value="Corporate-Networks"/>` — the rule delegates part of its logic to a separately exported Filter resource.
+**KQL equivalent:** Partial — inline the referenced filter.
+**Recipe:** Locate the referenced filter's XML in the export package and inline its conditions, using the Nested Filter → KQL Options above: Option 1 (flatten) for a filter used by one rule; Option 2 (workspace KQL function) when the same filter is referenced by many rules in the batch — translate it once, `invoke` it everywhere.
+**Caveats:** Referenced filter not included in the export = blocking question → `07-questions/open-questions.md`; do NOT approximate from the filter's name. Cap Logic Fidelity at 70% if forced to deliver without it.

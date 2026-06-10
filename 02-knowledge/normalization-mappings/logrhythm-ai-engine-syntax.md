@@ -146,7 +146,7 @@ Determines which Sentinel table to use:
 
 ## Multi-Block Correlation
 
-When a rule has multiple `<Block>` elements, each block is a separate event group. By default, **all blocks must be satisfied** within the `<ObservationPeriod>` (AND semantics). The grouping field links events across blocks.
+When a rule has multiple `<Block>` elements, each block is a separate event group. By default, **all blocks must be satisfied** within the `<ObservationPeriod>` (AND semantics, no ordering). The grouping field links events across blocks. Ordered sequences (THEN semantics) are covered after the unordered example.
 
 ```xml
 <Blocks>
@@ -160,7 +160,7 @@ When a rule has multiple `<Block>` elements, each block is a separate event grou
 <ObservationPeriod seconds="1800"/>
 ```
 
-**→ KQL correlation pattern:**
+**→ KQL correlation pattern (unordered AND):**
 ```kql
 let lookback = ago(30m);
 let scanners = CommonSecurityLog
@@ -177,6 +177,63 @@ CommonSecurityLog
 ```
 
 ---
+
+## Hard Constructs — Ordered Sequences, Windows, Cross-Block Uniqueness
+
+Classify any rule containing these as **hard** in Step 0.
+
+### Ordered sequence (Block A THEN Block B)
+
+**What it is:** AIE rules where blocks must match IN ORDER. Recognize via a block `order`/`sequence` attribute, a `<BlockRelationship>` element, or rule type "Sequenced" in the export — absence of these means unordered AND (above).
+**KQL equivalent:** Partial.
+**Recipe:**
+- 2 blocks: pattern 13 in `02-knowledge/house-style/kql-patterns.md` (time-window correlation join) — the post-join filter `event2_time - event1_time >= 0` enforces the ordering.
+- 3+ blocks: pattern 15 (`scan`), one `step` per block in order, each step binding the grouping field to the previous step:
+```kql
+// Block1: scan (>=10 in 5m) THEN Block2: exploit THEN Block3: outbound, same originIP
+let lookback = ago(30m);
+CommonSecurityLog
+| where TimeGenerated >= lookback
+| where DeviceEventCategory in ("Network Scan", "Exploit", "Command and Control")
+| sort by SourceIP asc, TimeGenerated asc
+| scan with_match_id=SeqId declare (Stage: int) with
+(
+    step s1: DeviceEventCategory == "Network Scan";
+    step s2: DeviceEventCategory == "Exploit" and SourceIP == s1.SourceIP;
+    step s3: DeviceEventCategory == "Command and Control" and SourceIP == s2.SourceIP;
+)
+| summarize Stages = dcount(DeviceEventCategory), SeqStart = min(TimeGenerated), SeqEnd = max(TimeGenerated)
+    by SeqId, SourceIP
+| where Stages == 3 and SeqEnd - SeqStart <= 30m   // enforce observation period
+```
+**Caveats:** A per-block `matchCount` > 1 inside a sequence (e.g., "≥10 scans THEN 1 exploit") cannot be expressed as a single `scan` step — pre-aggregate that block into a `let` (as in the unordered example) and sequence the remaining blocks. Logic Fidelity ≤ 85% until tested.
+
+### Observation period vs per-block windows
+
+**What it is:** The rule has BOTH an `<ObservationPeriod seconds>` (whole-sequence window) and per-block `withinSeconds` (each block's own threshold window).
+**KQL equivalent:** Direct — but the two windows map to different places.
+**Recipe:**
+
+| Source value | Maps to |
+|---|---|
+| `observationPeriodSeconds` | ARM `queryPeriod` + outer `let lookback = ago(Xs)` + final `SeqEnd - SeqStart <= X` filter |
+| per-block `withinSeconds` == observation period | nothing extra — single lookback covers it |
+| per-block `withinSeconds` < observation period | that block's threshold counted per `bin(TimeGenerated, <withinSeconds>)`, or as a join delta constraint (`block2_time - block1_time <= withinSeconds`) |
+
+**Caveats:** `bin()` windows are fixed buckets, LogRhythm windows are sliding — a burst straddling a bin boundary may not trigger. Note in notes.md; if the client requires sliding-window fidelity, flag for a `scan`-based or shorter-bin variant. Never set `queryPeriod` shorter than `observationPeriodSeconds` (lesson L-2026-06-09-002 analog).
+
+### Unique values across blocks
+
+**What it is:** `matchType="Unique"` semantics spanning the whole rule — e.g., "N distinct impacted hosts across both stages within the observation period", not N distinct per block.
+**KQL equivalent:** Direct — but placement matters.
+**Recipe:** Correlate blocks first (join or `scan`), THEN apply `dcount` over the correlated result:
+```kql
+// distinct impacted hosts across both correlated stages
+<correlated blocks as above>
+| summarize UniqueHosts = dcount(DestinationHostName) by SourceIP
+| where UniqueHosts >= 5
+```
+**Caveats:** Running `dcount` per block before the join silently changes semantics (per-stage uniqueness instead of cross-stage) — this is the main translation trap. State in notes.md which interpretation the source rule used; if the export is ambiguous, ask (1 clarifying question allowed for hard inputs).
 
 ## Complete Translation Example
 

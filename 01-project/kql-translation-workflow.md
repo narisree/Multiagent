@@ -10,7 +10,7 @@ Classify the input as **easy, medium, or hard**:
 
 - **Easy:** standard event log detection, single table, close precedent in `02-knowledge/sentinel-rules/`, no complex logic, clear field mappings.
 - **Medium:** familiar detection type with twists — custom thresholds, moderate field mapping ambiguity, simple joins, partial precedent.
-- **Hard:** ANY of: unfamiliar source SIEM, no close precedent, complex correlation across tables, regex-heavy logic, custom aggregations, time-series detection, multi-stage kill-chain, ambiguous field semantics.
+- **Hard:** ANY of: unfamiliar source SIEM, no close precedent, complex correlation across tables, regex-heavy logic, custom aggregations, time-series detection, multi-stage kill-chain, ambiguous field semantics. Also auto-hard: stateful constructs (reference set / active list WRITES, session lists), Splunk `tstats`/data models, `transaction`/`streamstats`, macro or saved-filter references, QRadar building-block chains, ordered multi-block sequences — see the "Hard Constructs" section of the relevant normalization-mapping file.
 
 **Classify by the native query complexity, not just the description.** A rule titled "Failed Logins" with a LAST 24 HOURS + HAVING + sub-SELECT is hard, not easy.
 
@@ -213,8 +213,9 @@ Use this structure:
 In order:
 
 1. **Run KQL linter**: `python3 .claude/skills/kql-sentinel-lint/lint.py 08-generated/<name>/rule.json`
-   - If unavailable: run cognitive checklist from `.claude/skills/kql-sentinel-lint/SKILL.md`
-   - State which mode ran.
+   - Add `--live` when a validation workspace is configured (`SENTINEL_VALIDATE_WORKSPACE_ID` set) — runs the query against the user's own tenant via az CLI.
+   - If Python unavailable: run cognitive checklist from `.claude/skills/kql-sentinel-lint/SKILL.md`
+   - State which mode ran: `static+live | static | cognitive`.
 2. **Invoke blind critic** for medium/hard inputs (subagent `sentinel-rule-critic`).
 3. **Produce structured confidence breakdown** per `01-project/confidence-framework.md`.
 4. **Save outputs:**
@@ -242,13 +243,14 @@ In order:
 - Positive: <event that should trigger>
 - Negative: <event that should not trigger>
 
-**Lint findings:** (mode: script | cognitive)
+**Lint findings:** (mode: static+live | static | cognitive)
 - Errors: <none / list>
 - Schema violations: <none / list>
 - Semantic mismatches: <none / list>
 - Field mapping errors: <none / list>
 - House-style deviations: <none / list>
 - Risks: <list>
+- Live validation: passed | failed: <Kusto error> | skipped (<reason>)
 
 **Critic findings:** (medium/hard only)
 <findings or "not invoked — easy input">

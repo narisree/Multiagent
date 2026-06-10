@@ -1,0 +1,5 @@
+# Workspace GUIDs are client engagement data — never commit
+**/validate-config.local.json
+
+__pycache__/
+*.pyc
