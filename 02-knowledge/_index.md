@@ -7,9 +7,10 @@
 
 ## Sentinel Schema
 - `sentinel-schema/analytics-rule-schema.md` — full ARM template schema for Analytics Rules
-- `sentinel-schema/tables-reference.md` — all Sentinel tables, key fields, data connector
+- `sentinel-schema/tables-reference.md` — ~50 native Sentinel tables with key fields
 - `sentinel-schema/entity-mappings.md` — entity types and valid identifiers
 - `sentinel-schema/mitre-tactics.md` — valid tactic and technique values for Sentinel
+- `sentinel-schema/asim/_index.md` — ASIM normalized schemas (9 schemas from Azure/Azure-Sentinel repo)
 
 ## Precedent Translated Rules
 - `sentinel-rules/_index.md` — index of all validated translated rules (HOUSE STYLE)

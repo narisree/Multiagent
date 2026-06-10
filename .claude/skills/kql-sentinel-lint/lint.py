@@ -76,6 +76,17 @@ SENTINEL_TABLES = {
     "Event",
     "Perf",
     "Alert",
+    # UEBA
+    "BehaviorAnalytics", "IdentityInfo", "UserAccessAnalytics", "UserPeerAnalytics",
+    # ASIM unifying parsers
+    "imAuthentication", "imDns", "imProcessCreate", "imProcessTerminate",
+    "imFileEvent", "imRegistryEvent", "imUserManagement",
+    "imAuditEvent", "imDhcpEvent", "imNotification", "imNetworkSession",
+    # ASIM streaming normalization tables
+    "ASimAuthenticationEvent", "ASimDnsActivity", "ASimProcessEvent",
+    "ASimFileEvent", "ASimRegistryEvent", "ASimUserManagementActivity",
+    "ASimAuditEventActivity", "ASimDhcpEvent", "ASimNotification",
+    "ASimNetworkSessionLogs",
 }
 
 KQL_KEYWORDS = {
